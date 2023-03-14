@@ -3,6 +3,7 @@
 const express = require('express');
 const createHttpError = require('http-errors');
 const tar = require('tar');
+const path = require('path');
 
 const debug = require('debug')('app:routes/archive');
 
@@ -16,6 +17,16 @@ router.route('/generate-tgz')
     switch (process.env.STORAGE_BACKEND) {
       case 'json':
         res.setHeader('Content-Type', 'application/x-tar-gz');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${
+            path.format({
+              name: `db_${new Date().toISOString().replaceAll(':', '_')}`,
+              ext: '.tgz',
+            })
+          }"`,
+        );
+
         tar.create({
           cwd: dbRoot,
           gzip: true,

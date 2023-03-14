@@ -7,4 +7,4 @@ const server = require('./src/server');
 const port = process.env.HTTP_PORT;
 
 server.listen(port);
-debug(`server listening on port ${port}`);
+debug(`${process.env.npm_package_name} server listening on port ${port}`);
