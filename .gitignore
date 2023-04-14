@@ -1,5 +1,4 @@
 node_modules/
-db/
 .meta/
 package-lock.json
 .env

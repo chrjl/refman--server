@@ -6,7 +6,7 @@ const createHttpError = require('http-errors');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
-const debug = require('debug')('app:routes/flat-file-json');
+const debug = require('debug')('app:routes/json-storage');
 
 const router = express.Router();
 const dbRoot = process.env.DB_ROOT;
