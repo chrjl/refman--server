@@ -17,6 +17,8 @@ app.use('/entries', routes.entries);
 app.use('/archives', routes.archives);
 app.use('/metadata', routes.metadata);
 
+app.use('/sqlite', routes.sqlite);
+
 // error handler
 // use express default
 

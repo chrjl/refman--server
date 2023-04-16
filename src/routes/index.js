@@ -3,12 +3,11 @@
 const entries = require('./json-storage');
 const metadataScraper = require('./metadata-scraper');
 const archives = require('./archives');
-// const sqlite = require('./sqlite');
+const sqlite = require('./sqlite');
 
 module.exports = {
   entries,
   archives,
   metadata: metadataScraper,
-
-  // sqlite,
+  sqlite,
 };
