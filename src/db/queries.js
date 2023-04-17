@@ -1,16 +1,20 @@
-const debug = require('debug')('app:db/queries');
 const _ = require('lodash');
+const debug = require('debug')('app:db/queries');
 
 const db = require('./config');
 
 const headFields = ['id', 'title', 'author', 'publisher', 'url'];
 
-function preprocessJSON(json) {
-  const data = JSON.parse(json);
+function preprocess(data) {
   const { title, author, publisher, url, keywords, ...details } = data;
 
-  if (!('label' in details)) details.label = details.id;
-  delete details.id;
+  if ('id' in details) {
+    if (!('label' in details)) {
+      details.label = details.id;
+    }
+
+    delete details.id;
+  }
 
   return {
     entry: {
@@ -95,6 +99,33 @@ const getEntries = {
   },
 };
 
+async function createEntry(data) {
+  const { entry, keywords } = preprocess(data);
+
+  const entryId = await db('entries')
+    .insert(entry, ['id']);
+
+  await db('keywords')
+    .insert(keywords.map((keyword) => ({
+      entry_id: entryId[0].id,
+      keyword,
+    })));
+
+  return entryId;
+}
+
+async function deleteEntry(id) {
+  await db('entries')
+    .where('id', id)
+    .del();
+}
+
+async function deleteKeywords(entryId) {
+  await db('keywords')
+    .where('entry_id', entryId)
+    .del();
+}
+
 async function getAllKeywords() {
   const query = await db('keywords')
     .select('keyword')
@@ -119,9 +150,12 @@ const getKeywords = {
 };
 
 module.exports = {
-  preprocessJSON,
+  preprocess,
   getAllEntries,
   getAllKeywords,
   getKeywords,
   getEntries,
+  createEntry,
+  deleteEntry,
+  deleteKeywords,
 };

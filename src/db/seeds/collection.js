@@ -26,7 +26,7 @@ async function seed(knex) {
     .map(async (filename) => {
       const filePath = path.join(collPath, filename);
       const json = await fs.readFile(filePath, { encoding: 'utf8' });
-      const { entry, keywords } = queries.preprocessJSON(json);
+      const { entry, keywords } = queries.preprocess(JSON.parse(json));
 
       const entryId = await knex('entries').insert(entry, ['id']);
 

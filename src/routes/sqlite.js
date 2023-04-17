@@ -7,11 +7,16 @@ const db = require('../db/config');
 const queries = require('../db/queries');
 
 const router = express.Router();
+router.use(express.json());
 
 router.route('/entries')
   .get(async (req, res) => {
     const query = await queries.getAllEntries.heads();
     res.json(query);
+  })
+  .post(async (req, res) => {
+    const ids = await queries.createEntry(req.body);
+    res.status(201).json(ids);
   });
 
 router.route('/dump')
@@ -29,6 +34,14 @@ router.route('/entries/:id')
   .get(async (req, res) => {
     const entry = await queries.getEntries.byId(req.params.id);
     res.send(entry);
+  })
+  .delete(async (req, res) => {
+    const { id } = req.params;
+
+    await queries.deleteEntry(id);
+    await queries.deleteKeywords(id);
+
+    res.status(204).end();
   });
 
 router.route('/keywords/:entryId')
