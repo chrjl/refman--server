@@ -39,8 +39,13 @@ router.route('/entries/:id')
     const { id } = req.params;
 
     await queries.deleteEntry(id);
-    await queries.deleteKeywords(id);
 
+    res.status(204).end();
+  });
+
+router.route('/keywords/prune')
+  .delete(async (req, res) => {
+    await queries.deleteKeywords.prune();
     res.status(204).end();
   });
 
@@ -48,6 +53,18 @@ router.route('/keywords/:entryId')
   .get(async (req, res) => {
     const entry = await queries.getKeywords.byEntryId(req.params.entryId);
     res.send(entry);
+  })
+  .delete(async (req, res) => {
+    if (_.isEmpty(req.query)) {
+      await queries.deleteKeywords.byEntryId(req.params.entryId);
+    } else {
+      // generate array of keywords
+      const keywords = _.compact(_.concat(req.query.keyword));
+
+      await queries.deleteKeywords.byKeyword(req.params.entryId, keywords);
+    }
+
+    res.status(204).end();
   });
 
 router.route('/search')

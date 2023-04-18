@@ -120,11 +120,35 @@ async function deleteEntry(id) {
     .del();
 }
 
-async function deleteKeywords(entryId) {
-  await db('keywords')
-    .where('entry_id', entryId)
-    .del();
-}
+const deleteKeywords = {
+  async byEntryId(entryId) {
+    // delete all keyword records corresponding to entryId
+
+    return db('keywords')
+      .where('entry_id', entryId)
+      .del();
+  },
+
+  async byKeyword(entryId, keywords = []) {
+    // delete specific keyword records corresponding to entryId
+
+    return db('keywords')
+      .where('entry_id', entryId)
+      .andWhere('keyword', 'in', keywords)
+      .del();
+  },
+
+  async prune() {
+    const entrySubQuery = await db('entries')
+      .select('id');
+
+    const allEntryIds = entrySubQuery.map(((rec) => rec.id));
+
+    return db('keywords')
+      .whereNotIn('entry_id', allEntryIds)
+      .del();
+  },
+};
 
 async function getAllKeywords() {
   const query = await db('keywords')
@@ -144,7 +168,7 @@ const getKeywords = {
       .groupBy('entry_id')
       .where('entry_id', entryId);
 
-    const keywords = keywordsQuery.keywords.split(',');
+    const keywords = keywordsQuery?.keywords.split(',');
     return keywords;
   },
 };
