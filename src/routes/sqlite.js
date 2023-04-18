@@ -11,29 +11,29 @@ router.use(express.json());
 
 router.route('/entries')
   .get(async (req, res) => {
-    const query = await queries.getAllEntries.heads();
+    const query = await queries.getEntries.allHeads();
     res.json(query);
   })
   .post(async (req, res) => {
-    const ids = await queries.createEntry(req.body);
+    const ids = await queries.postEntry(req.body);
     res.status(201).json(ids);
   });
 
 router.route('/dump')
   .get(async (req, res) => {
-    const query = await queries.getAllEntries.dump();
+    const query = await queries.getEntries.dump();
     res.json(query);
   });
 
 router.route('/keywords')
   .get(async (req, res) => {
-    res.send(await queries.getAllKeywords());
+    res.send(await queries.getKeywords.all());
   });
 
 router.route('/entries/:id')
   .get(async (req, res) => {
     const entry = await queries.getEntries.byId(req.params.id);
-    res.send(entry);
+    res.send(_.pickBy(entry));
   })
   .delete(async (req, res) => {
     const { id } = req.params;
@@ -47,6 +47,21 @@ router.route('/keywords/prune')
   .delete(async (req, res) => {
     await queries.deleteKeywords.prune();
     res.status(204).end();
+  });
+
+router.route('/keywords/rename')
+  .patch(async (req, res) => {
+    const { from, to } = req.query;
+
+    if ([from, to].includes(undefined)) {
+      res.status(400).send('Missing query field ("from", "to")');
+      return false;
+    }
+
+    const updateCount = await queries.updateKeyword(from, to);
+
+    const statusCode = updateCount ? 200 : 204;
+    res.status(statusCode).end();
   });
 
 router.route('/keywords/:entryId')
@@ -65,6 +80,19 @@ router.route('/keywords/:entryId')
     }
 
     res.status(204).end();
+  })
+  .patch(async (req, res) => {
+    const keywords = req.query.keyword;
+    debug(keywords);
+
+    if (keywords === undefined) {
+      res.status(400).send('no keywords received');
+    } else {
+      const query = await queries.postKeywords(req.params.entryId, _.concat(keywords));
+
+      const statusCode = !query ? 204 : 201;
+      res.status(statusCode).end();
+    }
   });
 
 router.route('/search')

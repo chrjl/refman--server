@@ -38,8 +38,8 @@ function squashDetails(entry) {
   });
 }
 
-const getAllEntries = {
-  async heads() {
+const getEntries = {
+  async allHeads() {
     const query = await db('entries').select(headFields);
     return query.map((entry) => _.pickBy(entry));
   },
@@ -56,9 +56,7 @@ const getAllEntries = {
       .map(squashDetails)
       .map((entry) => _.pickBy(entry));
   },
-};
 
-const getEntries = {
   async byId(ids) {
     // note: GROUP_CONCAT is sqlite-specific
 
@@ -99,19 +97,37 @@ const getEntries = {
   },
 };
 
-async function createEntry(data) {
+async function postEntry(data) {
   const { entry, keywords } = preprocess(data);
 
   const entryId = await db('entries')
     .insert(entry, ['id']);
 
-  await db('keywords')
-    .insert(keywords.map((keyword) => ({
-      entry_id: entryId[0].id,
-      keyword,
-    })));
+  await postKeywords(entryId[0].id, keywords);
 
   return entryId;
+}
+
+async function postKeywords(entryId, keywords = []) {
+  const existing = await getKeywords.byEntryId(entryId);
+  const newKeywords = _.difference(keywords, existing);
+
+  if (_.isEmpty(newKeywords)) {
+    return false;
+  }
+
+  return db('keywords')
+    .insert(newKeywords.map((keyword) => ({
+      entry_id: entryId,
+      keyword,
+    })))
+    .whereNotIn('keyword', existing);
+}
+
+async function updateKeyword(from, to) {
+  return db('keywords')
+    .where('keyword', from)
+    .update('keyword', to);
 }
 
 async function deleteEntry(id) {
@@ -150,15 +166,15 @@ const deleteKeywords = {
   },
 };
 
-async function getAllKeywords() {
-  const query = await db('keywords')
-    .select('keyword')
-    .distinct();
-
-  return query.map((res) => res.keyword).sort((a, b) => (a > b ? 1 : -1));
-}
-
 const getKeywords = {
+  async all() {
+    const query = await db('keywords')
+      .select('keyword')
+      .distinct();
+
+    return query.map((res) => res.keyword).sort((a, b) => (a > b ? 1 : -1));
+  },
+
   async byEntryId(entryId) {
     // note: GROUP_CONCAT is sqlite-specific
 
@@ -175,11 +191,11 @@ const getKeywords = {
 
 module.exports = {
   preprocess,
-  getAllEntries,
-  getAllKeywords,
   getKeywords,
   getEntries,
-  createEntry,
+  postEntry,
+  postKeywords,
   deleteEntry,
   deleteKeywords,
+  updateKeyword,
 };
