@@ -1,10 +1,6 @@
 const _ = require('lodash');
 const debug = require('debug')('app:db/queries');
 
-const db = require('./config');
-
-const headFields = ['id', 'title', 'author', 'publisher', 'url'];
-
 function preprocess(data) {
   const { title, author, publisher, url, keywords, ...details } = data;
 
@@ -38,30 +34,37 @@ function squashDetails(entry) {
   });
 }
 
-const getEntries = {
-  async allHeads() {
-    const query = await db('entries').select(headFields);
-    return query.map((entry) => _.pickBy(entry));
-  },
+class Transaction {
+  constructor(knex) {
+    // accepts either an open knex connection or transaction
+    this.knex = knex;
+  }
+
+  headFields = ['id', 'title', 'author', 'publisher', 'url'];
 
   async dump() {
     // note: GROUP_CONCAT is sqlite-specific
 
-    const query = await db('entries')
-      .select(db.raw('entries.*, GROUP_CONCAT(keywords.keyword) AS keywords'))
+    const query = await this.knex('entries')
+      .select(this.knex.raw('entries.*, GROUP_CONCAT(keywords.keyword) AS keywords'))
       .join('keywords', 'keywords.entry_id', 'entries.id')
       .groupBy('id');
 
     return query
       .map(squashDetails)
       .map((entry) => _.pickBy(entry));
-  },
+  }
 
-  async byId(ids) {
+  async getAllEntries() {
+    const query = await this.knex('entries').select(this.headFields);
+    return query.map((entry) => _.pickBy(entry));
+  }
+
+  async getEntriesById(ids) {
     // note: GROUP_CONCAT is sqlite-specific
 
-    const query = await db('entries')
-      .select(db.raw('entries.*, GROUP_CONCAT(keywords.keyword) AS keywords'))
+    const query = await this.knex('entries')
+      .select(this.knex.raw('entries.*, GROUP_CONCAT(keywords.keyword) AS keywords'))
       .join('keywords', 'keywords.entry_id', 'entries.id')
       .groupBy('entries.id')
       .whereIn('entries.id', _.concat(ids));
@@ -70,132 +73,119 @@ const getEntries = {
       .map(squashDetails)
       .map((entry) => _.omitBy(entry, (v, k) => k === 'id'));
 
-    if (entries.length === 1) return _.head(entries);
     return entries;
-  },
+  }
 
-  async byKeyword(keywords) {
+  async getEntriesByKeyword(keywords) {
     // accepts array or string (converts to array with _.concat)
 
-    const recordIds = await db('keywords')
+    const recordIds = await this.knex('keywords')
       .select('entry_id')
       .distinct()
       .whereIn('keyword', _.concat(keywords));
 
     return recordIds.map((record) => record.entry_id);
-    // return this.byId(ids);
-  },
+  }
 
-  async byAuthorSearch(author) {
-    const recordIds = await db('entries')
+  async getEntriesByAuthor(author) {
+    const recordIds = await this.knex('entries')
       .select('id')
       .whereLike('author', `%${author}%`)
       .orWhereLike('publisher', `%${author}%`);
 
     return recordIds.map((record) => record.id);
-    // return this.byId(ids);
-  },
-};
-
-async function postEntry(data) {
-  const { entry, keywords } = preprocess(data);
-
-  const entryId = await db('entries')
-    .insert(entry, ['id']);
-
-  await postKeywords(entryId[0].id, keywords);
-
-  return entryId;
-}
-
-async function postKeywords(entryId, keywords = []) {
-  const existing = await getKeywords.byEntryId(entryId);
-  const newKeywords = _.difference(keywords, existing);
-
-  if (_.isEmpty(newKeywords)) {
-    return false;
   }
 
-  return db('keywords')
-    .insert(newKeywords.map((keyword) => ({
-      entry_id: entryId,
-      keyword,
-    })))
-    .whereNotIn('keyword', existing);
-}
+  async createEntry(data = {}) {
+    const { entry, keywords } = preprocess(data);
 
-async function updateKeyword(from, to) {
-  return db('keywords')
-    .where('keyword', from)
-    .update('keyword', to);
-}
+    const entryId = await this.knex('entries')
+      .insert(entry, ['id']);
 
-async function deleteEntry(id) {
-  await db('entries')
-    .where('id', id)
-    .del();
-}
+    await this.insertKeywords(entryId[0].id, keywords);
 
-const deleteKeywords = {
-  async byEntryId(entryId) {
-    // delete all keyword records corresponding to entryId
+    return entryId;
+  }
 
-    return db('keywords')
-      .where('entry_id', entryId)
+  async deleteEntries(ids) {
+    return this.knex('entries')
+      .whereIn('id', _.concat(ids))
       .del();
-  },
+  }
 
-  async byKeyword(entryId, keywords = []) {
-    // delete specific keyword records corresponding to entryId
-
-    return db('keywords')
-      .where('entry_id', entryId)
-      .andWhere('keyword', 'in', keywords)
-      .del();
-  },
-
-  async prune() {
-    const entrySubQuery = await db('entries')
-      .select('id');
-
-    const allEntryIds = entrySubQuery.map(((rec) => rec.id));
-
-    return db('keywords')
-      .whereNotIn('entry_id', allEntryIds)
-      .del();
-  },
-};
-
-const getKeywords = {
-  async all() {
-    const query = await db('keywords')
+  async getAllKeywords() {
+    const query = await this.knex('keywords')
       .select('keyword')
       .distinct();
 
     return query.map((res) => res.keyword).sort((a, b) => (a > b ? 1 : -1));
-  },
+  }
 
-  async byEntryId(entryId) {
+  async getKeywordsByEntryId(entryId) {
     // note: GROUP_CONCAT is sqlite-specific
 
-    const keywordsQuery = await db('keywords')
-      .select(db.raw('GROUP_CONCAT(keyword) AS keywords'))
-      .first()
+    const query = await this.knex('keywords')
+      .select(this.knex.raw('GROUP_CONCAT(keyword) AS keywords'))
       .groupBy('entry_id')
-      .where('entry_id', entryId);
+      .where('entry_id', entryId)
+      .first();
 
-    const keywords = keywordsQuery?.keywords.split(',');
+    const keywords = query?.keywords.split(',');
     return keywords;
-  },
-};
+  }
+
+  async insertKeywords(entryId, keywords = []) {
+    const existing = await this.getKeywordsByEntryId(entryId);
+    const newKeywords = _.difference(keywords, existing);
+
+    if (_.isEmpty(newKeywords)) {
+      return false;
+    }
+
+    return this.knex('keywords')
+      .insert(newKeywords.map((keyword) => ({
+        entry_id: entryId,
+        keyword,
+      })))
+      .whereNotIn('keyword', existing);
+  }
+
+  async deleteAllKeywordsFromEntry(entryId) {
+    // delete all keyword records corresponding to entryId
+
+    return this.knex('keywords')
+      .where('entry_id', entryId)
+      .del();
+  }
+
+  async deleteKeywordsFromEntry(entryId, keywords = []) {
+    // delete specific keyword records corresponding to entryId
+
+    return this.knex('keywords')
+      .where('entry_id', entryId)
+      .andWhere('keyword', 'in', keywords)
+      .del();
+  }
+
+  async pruneKeywords() {
+    const entrySubQuery = await this.knex('entries')
+      .select('id');
+
+    const allEntryIds = entrySubQuery.map(((rec) => rec.id));
+
+    return this.knex('keywords')
+      .whereNotIn('entry_id', allEntryIds)
+      .del();
+  }
+
+  async renameKeyword(from, to) {
+    return this.knex('keywords')
+      .where('keyword', from)
+      .update('keyword', to);
+  }
+}
 
 module.exports = {
+  Transaction,
   preprocess,
-  getKeywords,
-  getEntries,
-  postEntry,
-  postKeywords,
-  deleteEntry,
-  deleteKeywords,
-  updateKeyword,
 };
