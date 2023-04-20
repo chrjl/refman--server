@@ -66,6 +66,31 @@ router.route('/entries/:id')
   .delete(async (req, res) => {
     await q.deleteEntries(req.params.id);
     res.status(204).end();
+  })
+  .put(async (req, res) => {
+    const { keywords, ...entry } = req.body;
+
+    const trx = await knex.transaction();
+    const queries = new Transaction(trx);
+
+    // update entry
+    const didUpdate = await queries.updateEntry(req.params.id, entry);
+
+    // diff keywords
+    const previousKeywords = await queries.getKeywordsByEntryId(req.params.id);
+    const extraneousKeywords = _.difference(previousKeywords, keywords);
+
+    // update keywords
+    await queries.deleteKeywordsFromEntry(req.params.id, extraneousKeywords);
+    await queries.insertKeywords(req.params.id, keywords);
+
+    await trx.commit();
+
+    if (didUpdate === 0) {
+      res.status(404).end();
+    } else {
+      res.status(200).end();
+    }
   });
 
 router.route('/keywords/prune')
