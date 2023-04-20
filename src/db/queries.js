@@ -106,7 +106,10 @@ class Transaction {
   }
 
   async updateEntry(id, data = {}) {
-    const { entry, keywords } = preprocess(data);
+    let { entry } = preprocess(data);
+
+    // replace undefined fields with null (to overwrite)
+    entry = _.mapValues(entry, (value) => value || null);
 
     return this.knex('entries')
       .where('id', id)
