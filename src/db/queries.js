@@ -18,7 +18,7 @@ function preprocess(data) {
       author: author?.join(','),
       publisher,
       url,
-      details,
+      details: JSON.stringify(details),
     },
     keywords,
   };
@@ -102,9 +102,15 @@ class Transaction {
     const entryId = await this.knex('entries')
       .insert(entry, ['id']);
 
-    await this.insertKeywords(entryId[0].id, keywords);
+    return entryId[0].id;
+  }
 
-    return entryId;
+  async updateEntry(id, data = {}) {
+    const { entry, keywords } = preprocess(data);
+
+    return this.knex('entries')
+      .where('id', id)
+      .update(entry);
   }
 
   async deleteEntries(ids) {

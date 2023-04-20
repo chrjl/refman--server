@@ -13,11 +13,32 @@ router.use(express.json());
 
 router.route('/entries')
   .get(async (req, res) => {
-    const query = await q.getAllEntries();
+    let query;
+
+    if (_.isEmpty(req.query)) {
+      // query = await q.getAllEntries();
+      query = await q.dump();
+    } else {
+      query = await q.getEntriesById(req.query.id);
+    }
+
     res.json(query);
   })
   .post(async (req, res) => {
-    const ids = await q.createEntry(req.body);
+    const entries = _.concat(req.body);
+    const ids = [];
+
+    await Promise.all(entries.map(async (entry) => {
+      const trx = await knex.transaction();
+      const queries = new Transaction(trx);
+
+      const id = await queries.createEntry(entry);
+      await queries.insertKeywords(id, entry.keywords);
+
+      await trx.commit();
+      ids.push(id);
+    }));
+
     res.status(201).json(ids);
   });
 
@@ -102,7 +123,7 @@ router.route('/keywords/:entryId')
 router.route('/search')
   .get(async (req, res) => {
     if (_.isEmpty(req.query)) {
-      res.send('supported search fields: keywords, author');
+      res.status(400).send('no search query submitted');
       return;
     }
 
@@ -110,7 +131,6 @@ router.route('/search')
 
     if (req.query.keyword) {
       query.keywords = await q.getEntriesByKeyword(req.query.keyword);
-      // query.keywords = await queries.getEntries.byKeyword(req.query.keyword);
     }
 
     if (req.query.author) {
