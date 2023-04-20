@@ -93,12 +93,6 @@ router.route('/entries/:id')
     }
   });
 
-router.route('/keywords/prune')
-  .delete(async (req, res) => {
-    await q.pruneKeywords();
-    res.status(204).end();
-  });
-
 router.route('/keywords/rename')
   .patch(async (req, res, next) => {
     const { from, to } = req.query;
@@ -113,21 +107,22 @@ router.route('/keywords/rename')
     res.status(statusCode).end();
   });
 
-router.route('/keywords/:entryId')
+router.route('/entries/:id/keywords')
+  // router.route('/keywords/:entryId')
   .get(async (req, res) => {
-    const entry = await q.getKeywordsByEntryId(req.params.entryId);
+    const entry = await q.getKeywordsByEntryId(req.params.id);
     res.send(entry);
   })
   .delete(async (req, res, next) => {
     if (_.isEmpty(req.query)) {
-      await q.deleteAllKeywordsFromEntry(req.params.entryId);
+      await q.deleteAllKeywordsFromEntry(req.params.id);
     } else if (_.isEmpty(req.query.keyword)) {
       return next(createHttpError(400, 'no keywords received'));
     } else {
       // generate array of keywords
       const keywords = _.compact(_.concat(req.query.keyword));
 
-      await q.deleteKeywordsFromEntry(req.params.entryId, keywords);
+      await q.deleteKeywordsFromEntry(req.params.id, keywords);
     }
 
     res.status(204).end();
@@ -139,7 +134,7 @@ router.route('/keywords/:entryId')
       return next(createHttpError(400, 'no usable keywords received'));
     }
 
-    const query = await q.insertKeywords(req.params.entryId, _.concat(keywords));
+    const query = await q.insertKeywords(req.params.id, _.concat(keywords));
 
     const statusCode = query ? 201 : 204;
     res.status(statusCode).end();
@@ -163,6 +158,12 @@ router.route('/search')
     }
 
     res.send(_.compact(_.concat(query.keywords, query.author)));
+  });
+
+router.route('/keywords/prune')
+  .delete(async (req, res) => {
+    await q.pruneKeywords();
+    res.status(204).end();
   });
 
 module.exports = router;
