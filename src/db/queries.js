@@ -188,6 +188,23 @@ class Transaction {
   }
 
   async renameKeyword(from, to) {
+    const entryIds = {};
+    entryIds.allMatches = await this.getEntriesByKeyword(from);
+
+    // check which entries already have the new keyword, to avoid duplicates
+    const keywordExists = await this.knex('keywords')
+      .whereIn('entry_id', entryIds.allMatches)
+      .andWhere('keyword', to)
+      .select('entry_id');
+
+    entryIds.keywordExists = keywordExists.map((entry) => entry['entry_id']);
+
+    // for all matches that already have the new keyword: delete keyword record
+    await Promise.all(
+      entryIds.keywordExists.map(async (id) => this.deleteKeywordsFromEntry(id, [from]))
+    );
+
+    // for other matches, update keyword records: from => to
     return this.knex('keywords')
       .where('keyword', from)
       .update('keyword', to);

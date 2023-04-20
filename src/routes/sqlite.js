@@ -93,20 +93,6 @@ router.route('/entries/:id')
     }
   });
 
-router.route('/keywords/rename')
-  .patch(async (req, res, next) => {
-    const { from, to } = req.query;
-
-    if ([from, to].includes(undefined)) {
-      return next(createHttpError(400, 'Missing query field ("from", "to")'));
-    }
-
-    const updateCount = await q.renameKeyword(from, to);
-
-    const statusCode = updateCount ? 200 : 204;
-    res.status(statusCode).end();
-  });
-
 router.route('/entries/:id/keywords')
   // router.route('/keywords/:entryId')
   .get(async (req, res) => {
@@ -164,6 +150,25 @@ router.route('/keywords/prune')
   .delete(async (req, res) => {
     await q.pruneKeywords();
     res.status(204).end();
+  });
+
+router.route('/keywords/rename')
+  .patch(async (req, res, next) => {
+    const { from, to } = req.query;
+
+    if ([from, to].includes(undefined)) {
+      return next(createHttpError(400, 'Missing query field ("from", "to")'));
+    }
+
+    const trx = await knex.transaction();
+    const queries = new Transaction(trx);
+
+    const updateCount = await queries.renameKeyword(from, to);
+
+    trx.commit();
+
+    const statusCode = updateCount ? 200 : 204;
+    res.status(statusCode).end();
   });
 
 module.exports = router;
