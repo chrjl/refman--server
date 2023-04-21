@@ -17,7 +17,7 @@ function preprocess(data, defaultNull = false) {
 
   let entry = {
     title,
-    author: author ? author.join(',') : author, // can be undefined or null
+    author: author ? _.concat(author).join(',') : author, // can be undefined or null
     publisher,
     url,
     details: JSON.stringify(details),

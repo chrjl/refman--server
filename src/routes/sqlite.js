@@ -97,26 +97,28 @@ router.route('/entries/:id')
       return next(createHttpError(400, 'no update query received'));
     }
 
-    const getEntry = await q.getEntriesById(req.params.id);
     if (_.isEmpty(await q.getEntriesById(req.params.id))) {
       return next(createHttpError(404));
     }
 
-    let entry = req.query;
-    entry = _.mapValues(entry, (value) => value || null);
-    debug(entry);
+    // replace empty query values with null (to delete)
+    const entry = _.mapValues(req.query, (value) => value || null);
 
     if (entry.author) {
       entry.author = _.concat(entry.author);
     }
 
-    await q.updateEntryFields(req.params.id, entry);
+    const trx = await knex.transaction();
+    const queries = new Transaction(trx);
+
+    await queries.updateEntryFields(req.params.id, entry);
+
+    await trx.commit();
 
     res.status(200).end();
   });
 
 router.route('/entries/:id/keywords')
-  // router.route('/keywords/:entryId')
   .get(async (req, res) => {
     const entry = await q.getKeywordsByEntryId(req.params.id);
     res.send(entry);
