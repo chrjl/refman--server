@@ -74,7 +74,7 @@ router.route('/entries/:id')
     const queries = new Transaction(trx);
 
     // update entry
-    const didUpdate = await queries.updateEntry(req.params.id, entry);
+    const didUpdate = await queries.overwriteEntry(req.params.id, entry);
 
     // diff keywords
     const previousKeywords = await queries.getKeywordsByEntryId(req.params.id);
@@ -91,6 +91,28 @@ router.route('/entries/:id')
     } else {
       res.status(200).end();
     }
+  })
+  .patch(async (req, res, next) => {
+    if (_.isEmpty(req.query)) {
+      return next(createHttpError(400, 'no update query received'));
+    }
+
+    const getEntry = await q.getEntriesById(req.params.id);
+    if (_.isEmpty(await q.getEntriesById(req.params.id))) {
+      return next(createHttpError(404));
+    }
+
+    let entry = req.query;
+    entry = _.mapValues(entry, (value) => value || null);
+    debug(entry);
+
+    if (entry.author) {
+      entry.author = _.concat(entry.author);
+    }
+
+    await q.updateEntryFields(req.params.id, entry);
+
+    res.status(200).end();
   });
 
 router.route('/entries/:id/keywords')

@@ -1,7 +1,10 @@
 const _ = require('lodash');
 const debug = require('debug')('app:db/queries');
 
-function preprocess(data) {
+function preprocess(data, defaultNull = false) {
+  // defaultNull: replace undefined fields with null (will overwrite fields)
+  // otherwise omit undefined fields
+
   const { title, author, publisher, url, keywords, ...details } = data;
 
   if ('id' in details) {
@@ -12,14 +15,22 @@ function preprocess(data) {
     delete details.id;
   }
 
+  let entry = {
+    title,
+    author: author ? author.join(',') : author, // can be undefined or null
+    publisher,
+    url,
+    details: JSON.stringify(details),
+  };
+
+  if (defaultNull) {
+    entry = _.mapValues(entry, (value) => value || null);
+  } else {
+    entry = _.omitBy(entry, (v) => v === undefined);
+  }
+
   return {
-    entry: {
-      title,
-      author: author?.join(','),
-      publisher,
-      url,
-      details: JSON.stringify(details),
-    },
+    entry,
     keywords,
   };
 }
@@ -71,7 +82,7 @@ class Transaction {
 
     const entries = query
       .map(squashDetails)
-      .map((entry) => _.omitBy(entry, (v, k) => k === 'id'));
+      .map((entry) => _.omit(entry, 'id'));
 
     return entries;
   }
@@ -105,15 +116,53 @@ class Transaction {
     return entryId[0].id;
   }
 
-  async updateEntry(id, data = {}) {
-    let { entry } = preprocess(data);
-
+  async overwriteEntry(id, data = {}) {
     // replace undefined fields with null (to overwrite)
-    entry = _.mapValues(entry, (value) => value || null);
+    const { entry } = preprocess(data, true);
 
     return this.knex('entries')
       .where('id', id)
       .update(entry);
+  }
+
+  async updateEntryFields(id, data = {}) {
+    const updates = preprocess(data, false).entry;
+
+    // update non-JSON fields
+    const head = _.omit(updates, ['details']);
+
+    if (!_.isEmpty(head)) {
+      await this.knex('entries')
+        .where('id', id)
+        .update(head);
+    }
+
+    // update details JSON
+    updates.details = JSON.parse(updates.details);
+
+    // perform updates in series
+    // eslint-disable-next-line no-restricted-syntax
+    for await (const [key, value] of Object.entries(updates.details)) {
+      let updatedDetails;
+
+      if (value === null) { // remove fields explicitly set to null
+        updatedDetails = await this.knex('entries')
+          .where('id', id)
+          .jsonRemove('details', `$.${key}`, 'details')
+          .select()
+          .first();
+      } else {
+        updatedDetails = await this.knex('entries')
+          .where('id', id)
+          .jsonSet('details', `$.${key}`, `${value}`, 'details')
+          .select()
+          .first();
+      }
+
+      await this.knex('entries')
+        .where('id', id)
+        .update(updatedDetails);
+    }
   }
 
   async deleteEntries(ids) {
