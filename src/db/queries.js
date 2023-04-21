@@ -65,7 +65,7 @@ class Transaction {
 
     const query = await this.knex('entries')
       .select(this.knex.raw('entries.*, GROUP_CONCAT(keywords.keyword) AS keywords'))
-      .join('keywords', 'keywords.entry_id', 'entries.id')
+      .leftOuterJoin('keywords', 'keywords.entry_id', 'entries.id')
       .groupBy('entries.id')
       .whereIn('entries.id', _.concat(ids));
 
