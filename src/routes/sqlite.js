@@ -12,14 +12,16 @@ const router = express.Router();
 router.use(express.json());
 
 router.route('/entries')
-  .get(async (req, res) => {
+  .get(async (req, res, next) => {
     let query;
 
     if (_.isEmpty(req.query)) {
       // query = await q.getAllEntries();
       query = await q.dump();
-    } else {
+    } else if (req.query.id) {
       query = await q.getEntriesById(req.query.id);
+    } else {
+      return next(createHttpError(400, 'bad query'));
     }
 
     res.json(query);
@@ -156,8 +158,8 @@ router.route('/search')
       res.status(400).send('no search query submitted');
       return;
     }
-
-    const query = {};
+    
+  const query = {};
 
     if (req.query.keyword) {
       query.keywords = await q.getEntriesByKeyword(req.query.keyword);
@@ -187,10 +189,10 @@ router.route('/keywords/rename')
     const trx = await knex.transaction();
     const queries = new Transaction(trx);
 
-    const updateCount = await queries.renameKeyword(from, to);
-
-    trx.commit();
-
+  const updateCount = await queries.renameKeyword(from, to);
+    
+  trx.commit();
+    
     const statusCode = updateCount ? 200 : 204;
     res.status(statusCode).end();
   });
