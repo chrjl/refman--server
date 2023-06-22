@@ -7,8 +7,8 @@ const definition = require('./api-definition.json');
 
 const options = {
   definition,
-  apis: [path.join(__dirname, '*.js')]
-}
+  apis: [path.join(__dirname, '*.js')],
+};
 
 const openapiSpecification = swaggerJsdoc(options);
 

@@ -6,53 +6,75 @@ const createHttpError = require('http-errors');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
-const debug = require('debug')('app:routes/json-storage');
+const debug = require('debug')('app:routes/json-storage-api');
 
 const router = express.Router();
 const dbRoot = process.env.DB_ROOT;
 const dbTrash = process.env.DB_TRASH;
 
-router.route('/')
-  .get(async (req, res, next) => {
-    try {
-      const files = await fs.readdir(dbRoot);
+/**
+ * @openapi
+ * /items:
+ *   get:
+ *     summary: All items in the collection, excluding trashed items.
+ *     description: |
+ *       Reads file list (`fs.readdir`) of storage directory, filtering in files with `.json` extname.
+ *
+ *       Then generates an item for each file: assigns file name (without extname) to `id` field, reads file (`fs.readFile`) and parses (`JSON.parse`) fields.
+ *     tags: [items]
+ *     responses:
+ *       '200':
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *       '404':
+ *         description: Not Found (ENOENT storage directory)
+ */
 
-      const parseFiles = files.map(async (file) => {
-        const filePath = path.join(dbRoot, file);
+router
+  .route('/')
+  .get([
+    async (req, res, next) => {
+      // get file list from storage root
+      try {
+        const fileNames = await fs.readdir(dbRoot);
+        res.locals.fileNames = fileNames.filter(
+          (fileName) => path.extname(fileName) === '.json'
+        );
 
-        const { id, url, URL } = JSON.parse(await fs.readFile(filePath));
-
-        const links = [
-          {
-            href: `/entries/${path.basename(file, '.json')}`,
-            rel: 'self',
-            method: 'GET',
-          },
-        ];
-
-        if (url || URL) {
-          links.push({
-            href: url || URL,
-            rel: 'source',
-            method: 'GET',
-          });
+        next();
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          return next(createHttpError(404));
         }
+        next(err);
+      }
+    },
+    async (req, res, next) => {
+      // parse files and return response
+      const parseFiles = res.locals.fileNames.map(async (fileName) => {
+        try {
+          const filePath = path.join(dbRoot, fileName);
+          const fileContent = JSON.parse(await fs.readFile(filePath));
 
-        return { id, links };
+          const id = path.basename(fileName, '.json');
+          return { id, ...fileContent };
+        } catch (err) {
+          debug(`Error parsing ${fileName}`);
+          throw err;
+        }
       });
 
-      const data = await Promise.all(parseFiles);
-      res.json(data);
-    } catch (err) {
-      switch (err.code) {
-        case 'ENOENT':
-          next(createHttpError(404));
-          break;
-        default:
-          next(createHttpError(500));
-      }
-    }
-  })
+      const data = await Promise.allSettled(parseFiles);
+      const items = data
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      res.json(items);
+    },
+  ])
   .post(async (req, res, next) => {
     const { id } = req.body;
     try {
@@ -79,7 +101,8 @@ router.route('/')
     }
   });
 
-router.route('/DUMP')
+router
+  .route('/DUMP')
   .get(async (req, res, next) => {
     try {
       const fileNames = await fs.readdir(dbRoot);
@@ -87,7 +110,10 @@ router.route('/DUMP')
       const readFileContents = fileNames
         .filter((file) => path.extname(file) === '.json')
         .map(async (fileName) => {
-          const content = await fs.readFile(path.join(dbRoot, fileName), 'utf8');
+          const content = await fs.readFile(
+            path.join(dbRoot, fileName),
+            'utf8'
+          );
           return JSON.parse(content);
         });
 
@@ -102,27 +128,54 @@ router.route('/DUMP')
   })
   .all((req, res, next) => next(createHttpError(405)));
 
-router.route('/:id')
+/**
+ * @openapi
+ * /items/{id}:
+ *   get:
+ *     tags: [items]
+ *     summary: A specific item in the collection.
+ *     description: |
+ *       Sends file (`res.sendFile`) with file name `id`, extname `.json`, from storage root directory
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The item's primary key (in `json-storage` it corresponds to the file name, without extname)
+ *         example: eloquent-javascript
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       404:
+ *         description: Not found (ENOENT item file)
+ */
+
+router
+  .route('/:id')
   .all((req, res, next) => {
     req.pathname = `${path.join(dbRoot, req.params.id)}.json`;
     next();
   })
   .get(async (req, res, next) => {
     res.sendFile(`${req.params.id}.json`, { root: dbRoot }, (err) => {
+      console.log(err);
       if (err) {
-        switch (err.code) {
-          case 'ENOENT':
-            next(createHttpError(404));
-            break;
-          default:
-            next(createHttpError(500));
-        }
+        if (err.code === 'ENOENT') return next(createHttpError(404));
+        next(err);
       }
     });
   })
   .delete(async (req, res, next) => {
     try {
-      const trashPath = `${path.join(dbTrash, req.params.id)}.json-${Date.now()}`;
+      const trashPath = `${path.join(
+        dbTrash,
+        req.params.id
+      )}.json-${Date.now()}`;
 
       await fs.link(req.pathname, trashPath);
       await fs.unlink(req.pathname);
