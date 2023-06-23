@@ -8,6 +8,8 @@ const fs = require('node:fs/promises');
 
 const debug = require('debug')('app:routes/json-storage-api');
 
+const { deleteItemToTrash } = require('./json-storage-utils');
+
 const router = express.Router();
 const dbRoot = process.env.DB_ROOT;
 const dbTrash = process.env.DB_TRASH;
@@ -31,6 +33,21 @@ const dbTrash = process.env.DB_TRASH;
  *               type: array
  *       '404':
  *         description: Not Found (ENOENT storage directory)
+ *   delete:
+ *     summary: Delete multiple items
+ *     tags: [items]
+ *     parameters:
+ *       - name: itemKey
+ *         in: query
+ *         description: Comma-separated list of item `id`s to delete (to trash).
+ *         required: true
+ *         example: 'example1,example2,example3'
+ *         allowReserved: true
+ *     responses:
+ *       '204':
+ *         description: No Content
+ *       '400':
+ *         description: Bad Request
  */
 
 router
@@ -53,7 +70,7 @@ router
       }
     },
     async (req, res, next) => {
-      // parse files and return response
+      // parse files and respond with a single JSON array
       const parseFiles = res.locals.fileNames.map(async (fileName) => {
         try {
           const filePath = path.join(dbRoot, fileName);
@@ -75,6 +92,21 @@ router
       res.json(items);
     },
   ])
+  .delete(async (req, res, next) => {
+    if (!('itemKey' in req.query)) return next(createHttpError(400));
+
+    const { itemKey } = req.query;
+
+    const ids = itemKey.split(',');
+    const trashOperations = ids.map(async (id) => {
+      await deleteItemToTrash(id);
+      debug(id);
+    });
+
+    await Promise.all(trashOperations);
+
+    res.status(204).send();
+  })
   .post(async (req, res, next) => {
     const { id } = req.body;
     try {
@@ -101,32 +133,19 @@ router
     }
   });
 
-router
-  .route('/DUMP')
-  .get(async (req, res, next) => {
-    try {
-      const fileNames = await fs.readdir(dbRoot);
-
-      const readFileContents = fileNames
-        .filter((file) => path.extname(file) === '.json')
-        .map(async (fileName) => {
-          const content = await fs.readFile(
-            path.join(dbRoot, fileName),
-            'utf8'
-          );
-          return JSON.parse(content);
-        });
-
-      const archive = await Promise.all(readFileContents);
-      res.json(archive);
-    } catch (err) {
-      if (err instanceof SyntaxError) {
-        next(createHttpError(500, 'bad file in db'));
-      }
-      next(err);
-    }
-  })
-  .all((req, res, next) => next(createHttpError(405)));
+/**
+ * @openapi
+ * components:
+ *   parameters:
+ *     id:
+ *       in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: The item's primary key (in `json-storage` it corresponds to the file name, without extname)
+ *       example: example
+ */
 
 /**
  * @openapi
@@ -137,13 +156,7 @@ router
  *     description: |
  *       Sends file (`res.sendFile`) with file name `id`, extname `.json`, from storage root directory
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: The item's primary key (in `json-storage` it corresponds to the file name, without extname)
- *         example: eloquent-javascript
+ *       - $ref: '#/components/parameters/id'
  *     responses:
  *       200:
  *         description: OK
@@ -153,6 +166,16 @@ router
  *               type: object
  *       404:
  *         description: Not found (ENOENT item file)
+ *   delete:
+ *     tags: [items]
+ *     summary: Delete an item.
+ *     description: |
+ *       Link (`fs.link`) file to trash directory, then remove (`fs.unlink`) from collection directory
+ *     parameters:
+ *       - $ref: '#/components/parameters/id'
+ *     responses:
+ *       204:
+ *         description: No Content
  */
 
 router
@@ -163,7 +186,6 @@ router
   })
   .get(async (req, res, next) => {
     res.sendFile(`${req.params.id}.json`, { root: dbRoot }, (err) => {
-      console.log(err);
       if (err) {
         if (err.code === 'ENOENT') return next(createHttpError(404));
         next(err);
@@ -172,19 +194,12 @@ router
   })
   .delete(async (req, res, next) => {
     try {
-      const trashPath = `${path.join(
-        dbTrash,
-        req.params.id
-      )}.json-${Date.now()}`;
-
-      await fs.link(req.pathname, trashPath);
-      await fs.unlink(req.pathname);
-
-      res.status(204);
-      res.json({ message: 'DELETE success' });
-    } catch (err) {
-      next(createHttpError(500));
+      await deleteItemToTrash(req.params.id);
+    } catch (e) {
+      return next(e);
     }
+
+    res.status(204).send();
   })
   .put(async (req, res, next) => {
     try {
