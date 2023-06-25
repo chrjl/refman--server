@@ -4,7 +4,7 @@
     "version": "0.0.0",
     "title": "refman v0 (json-storage)",
     "summary": "An implementation of a CRUD app",
-    "description": "Storage in flat JSON files, CRUD operations via `node:fs`",
+    "description": "Storage in flat JSON files, CRUD operations via `node:fs`. The OpenAPI specification: [oas3.json](./oas3.json)",
     "license": {
       "name": null
     }

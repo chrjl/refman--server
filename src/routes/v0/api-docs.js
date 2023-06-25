@@ -24,4 +24,12 @@ const router = express.Router();
 router.use('/', swaggerUi.serve);
 router.get('/', swaggerUi.setup(openapiSpecification, uiOptions));
 
+router.get('/oas3.json', (req, res) => {
+  res.setHeader(
+    'Content-Disposition',
+    'filename="refman--server_v0.oas3.json"'
+  );
+  res.json(openapiSpecification);
+});
+
 module.exports = router;
