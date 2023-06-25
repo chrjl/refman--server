@@ -108,6 +108,53 @@ const dbTrash = process.env.DB_TRASH;
  *         description: The items were deleted (No Content)
  *       400:
  *         description: 'No `itemKeys` were provided (Bad Request)'
+ *   post:
+ *     summary: Create an item
+ *     description: |
+ *       Validate request:
+ *
+ *       - Validate request body fields.
+ *       - Validate path of file to be written.
+ *       - Don't overwrite an item that already exists.
+ *
+ *       Then write item (`fs.writeFile`) to a new file (`wx` flag).
+ *     tags: [items]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Item'
+ *           examples:
+ *             example-201/409:
+ *               $ref: '#/components/schemas/Item/example'
+ *             example-403:
+ *               description: 'Tries to use a malformed `key` to post to a parent directory.'
+ *               value:
+ *                 key: ../403example
+ *                 title: 403 Forbidden
+ *             example-400-itemKey:
+ *               description: 'Request body is missing `key`.'
+ *               value:
+ *                 title: 400 Bad Request
+ *             example-400-content:
+ *               description: 'Request body has no item fields.'
+ *               value:
+ *                 key: 400example
+ *     responses:
+ *       201:
+ *         description: 'The request completed. See the response JSON for status of individual writes. (Created)'
+ *         content:
+ *           application/json:
+ *             type: object
+ *             example:
+ *               id: example
+ *       400:
+ *         description: '`ERR_INVALID_ARG_TYPE` (Bad Request)'
+ *       409:
+ *         description: '`EEXIST` (Conflict)'
+ *       403:
+ *         description: '`EACCES` (Forbidden)'
  */
 
 router
@@ -168,27 +215,25 @@ router
     res.status(204).send();
   })
   .post(async (req, res, next) => {
-    const { id } = req.body;
+    const { key, ...item } = req.body;
+
+    // key and detail fields are both required
+    if (key === undefined || !Object.keys(item).length) {
+      return next(createHttpError(400));
+    }
+
     try {
-      const filePath = `${path.join(dbRoot, id)}.json`;
+    const pathname = generateFilePathFromItemKey(key);
 
-      await fs.writeFile(filePath, JSON.stringify(req.body), { flag: 'wx' });
-
-      res.status(201);
-      res.json({ message: 'POST success' });
-    } catch (err) {
-      switch (err.code) {
-        case 'ERR_INVALID_ARG_TYPE':
-          next(createHttpError(400));
-          break;
+      await fs.writeFile(pathname.item, JSON.stringify(item), { flag: 'wx' });
+      res.status(201).json({ key });
+    } catch (e) {
+      switch (e.code) {
         case 'EEXIST':
-          next(createHttpError(409));
-          break;
-        case 'EACCES':
-          next(createHttpError(403));
+          return next(createHttpError(409));
           break;
         default:
-          next(createHttpError(500));
+          return next(e);
       }
     }
   });
@@ -288,4 +333,4 @@ router
   });
 
 module.exports = router;
-debug('exported entries route');
+debug('exported items API');

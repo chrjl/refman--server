@@ -1,24 +1,33 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const debug = require('debug')('app:routes/json-storage-utils');
+const createHttpError = require('http-errors');
 
 const dbRoot = process.env.DB_ROOT;
 const dbTrash = process.env.DB_TRASH;
 
 function generateFilePathFromItemKey(itemKey) {
   if (itemKey === undefined) {
-    throw new TypeError('Missing itemKey');
+    throw new createHttpError.BadRequest();
   }
+  
+  // block directory traversal
+  if (path.dirname(path.normalize(itemKey)) !== '.') {
+    throw new createHttpError.Forbidden();
+  }
+
+  // sanitize itemKey
+  sanitizedItemKey = encodeURIComponent(itemKey);
 
   return {
     item: path.format({
       dir: dbRoot,
-      name: itemKey,
+      name: sanitizedItemKey,
       ext: '.json',
     }),
     trash: path.format({
       dir: dbTrash,
-      name: `${itemKey}-${Date.now()}`,
+      name: `${sanitizedItemKey}-${Date.now()}`,
       ext: '.json',
     }),
   };
