@@ -8,11 +8,68 @@ const fs = require('node:fs/promises');
 
 const debug = require('debug')('app:routes/json-storage-api');
 
-const { deleteItemToTrash } = require('./json-storage-utils');
+const {
+  generateFilePathFromItemKey,
+  deleteItemToTrash,
+} = require('./json-storage-utils');
 
 const router = express.Router();
 const dbRoot = process.env.DB_ROOT;
 const dbTrash = process.env.DB_TRASH;
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     Item:
+ *       type: object
+ *       required:
+ *         - key
+ *         - aliases
+ *         - url
+ *       properties:
+ *         key:
+ *           type: string
+ *           description: name of file in collection (not a BibLaTeX field)
+ *         ids:
+ *           type: list
+ *           description: BibLaTeX ids
+ *         url:
+ *           type: uri
+ *         keywords:
+ *           type: list
+ *         type:
+ *           type: string
+ *         entrysubtype:
+ *           type: string
+ *           description: for use with @online type
+ *         author:
+ *           type: list
+ *         publisher:
+ *           type: list
+ *         title:
+ *           type: string
+ *         date:
+ *           type: string
+ *         urldate:
+ *           type: string
+ *           description: access date
+ *       example:
+ *         value:
+ *           key: example
+ *           title: Express web framework (Node.js/JavaScript)
+ *           author:
+ *             - MDN
+ *           publisher:
+ *             - MDN
+ *           url: https://developer.mozilla.org/en-US/docs/Learn/Server-side/Express_Nodejs
+ *           type: online
+ *           entrysubtype: collection
+ *           date: "2022-09-09"
+ *           urldate: "2023-01-11"
+ *           ids:
+ *             - MDN_express
+ */
 
 /**
  * @openapi
@@ -22,32 +79,35 @@ const dbTrash = process.env.DB_TRASH;
  *     description: |
  *       Reads file list (`fs.readdir`) of storage directory, filtering in files with `.json` extname.
  *
- *       Then generates an item for each file: assigns file name (without extname) to `id` field, reads file (`fs.readFile`) and parses (`JSON.parse`) fields.
+ *       Then, generate an item for each file and return an array of item objects:
+ *
+ *       - Assign file name (without extname) to `key` field.
+ *       - Read file (`fs.readFile`) and parse (`JSON.parse`) fields.
  *     tags: [items]
  *     responses:
- *       '200':
- *         description: OK
+ *       200:
  *         content:
  *           application/json:
  *             schema:
  *               type: array
- *       '404':
- *         description: Not Found (ENOENT storage directory)
+ *       404:
+ *         description: '`ENOENT` storage directory (Not Found)'
  *   delete:
  *     summary: Delete multiple items
  *     tags: [items]
+ *     description: See `DELETE /items/{itemKey}`
  *     parameters:
  *       - name: itemKey
  *         in: query
- *         description: Comma-separated list of item `id`s to delete (to trash).
+ *         description: Comma-separated list of `key`s of items to delete (to trash).
  *         required: true
  *         example: 'example1,example2,example3'
  *         allowReserved: true
  *     responses:
- *       '204':
- *         description: No Content
- *       '400':
- *         description: Bad Request
+ *       204:
+ *         description: The items were deleted (No Content)
+ *       400:
+ *         description: 'No `itemKeys` were provided (Bad Request)'
  */
 
 router
@@ -74,10 +134,11 @@ router
       const parseFiles = res.locals.fileNames.map(async (fileName) => {
         try {
           const filePath = path.join(dbRoot, fileName);
-          const fileContent = JSON.parse(await fs.readFile(filePath));
+          const fileContent = await fs.readFile(filePath);
+          const item = JSON.parse(fileContent);
 
-          const id = path.basename(fileName, '.json');
-          return { id, ...fileContent };
+          const key = path.basename(fileName, '.json');
+          return { key, ...item };
         } catch (err) {
           debug(`Error parsing ${fileName}`);
           throw err;
@@ -97,10 +158,9 @@ router
 
     const { itemKey } = req.query;
 
-    const ids = itemKey.split(',');
-    const trashOperations = ids.map(async (id) => {
-      await deleteItemToTrash(id);
-      debug(id);
+    const keys = itemKey.split(',');
+    const trashOperations = keys.map(async (key) => {
+      await deleteItemToTrash(key);
     });
 
     await Promise.all(trashOperations);
@@ -137,55 +197,61 @@ router
  * @openapi
  * components:
  *   parameters:
- *     id:
+ *     itemKey:
  *       in: path
- *       name: id
+ *       name: itemKey
  *       required: true
  *       schema:
  *         type: string
  *       description: The item's primary key (in `json-storage` it corresponds to the file name, without extname)
- *       example: example
+ *       examples:
+ *         example-OK:
+ *           value: example
+ *         example-404:
+ *           value: 404
  */
 
 /**
  * @openapi
- * /items/{id}:
+ * /items/{itemKey}:
  *   get:
  *     tags: [items]
  *     summary: A specific item in the collection.
  *     description: |
  *       Sends file (`res.sendFile`) with file name `id`, extname `.json`, from storage root directory
  *     parameters:
- *       - $ref: '#/components/parameters/id'
+ *       - $ref: '#/components/parameters/itemKey'
  *     responses:
  *       200:
- *         description: OK
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *       404:
- *         description: Not found (ENOENT item file)
+ *         description: '`ENOENT` item file (Not Found)'
  *   delete:
  *     tags: [items]
  *     summary: Delete an item.
  *     description: |
  *       Link (`fs.link`) file to trash directory, then remove (`fs.unlink`) from collection directory
  *     parameters:
- *       - $ref: '#/components/parameters/id'
+ *       - $ref: '#/components/parameters/itemKey'
+ *     responses:
+ *       204:
+ *         description: The item was deleted (No Content)
  *     responses:
  *       204:
  *         description: No Content
  */
 
 router
-  .route('/:id')
+  .route('/:key')
   .all((req, res, next) => {
-    req.pathname = `${path.join(dbRoot, req.params.id)}.json`;
+    res.locals.pathname = generateFilePathFromItemKey(req.params.key);
     next();
   })
   .get(async (req, res, next) => {
-    res.sendFile(`${req.params.id}.json`, { root: dbRoot }, (err) => {
+    res.sendFile(res.locals.pathname.item, (err) => {
       if (err) {
         if (err.code === 'ENOENT') return next(createHttpError(404));
         next(err);
@@ -194,7 +260,7 @@ router
   })
   .delete(async (req, res, next) => {
     try {
-      await deleteItemToTrash(req.params.id);
+      await deleteItemToTrash(req.params.key);
     } catch (e) {
       return next(e);
     }
