@@ -25,7 +25,7 @@ const dbTrash = process.env.DB_TRASH;
  *       type: object
  *       required:
  *         - key
- *         - aliases
+ *         - ids
  *         - url
  *       properties:
  *         key:
@@ -56,7 +56,6 @@ const dbTrash = process.env.DB_TRASH;
  *           description: access date
  *       example:
  *         value:
- *           key: example
  *           title: Express web framework (Node.js/JavaScript)
  *           author:
  *             - MDN
@@ -113,7 +112,7 @@ const dbTrash = process.env.DB_TRASH;
  *     description: |
  *       Validate request:
  *
- *       - Validate request body fields.
+ *       - Validate request body fields (i.e. `key` is a required field).
  *       - Validate path of file to be written.
  *       - Don't overwrite an item that already exists.
  *
@@ -127,7 +126,9 @@ const dbTrash = process.env.DB_TRASH;
  *             $ref: '#/components/schemas/Item'
  *           examples:
  *             example-201/409:
- *               $ref: '#/components/schemas/Item/example'
+ *               value:
+ *                 key: example
+ *                 testField: testValue
  *             example-403:
  *               description: 'Tries to use a malformed `key` to post to a parent directory.'
  *               value:
@@ -148,7 +149,7 @@ const dbTrash = process.env.DB_TRASH;
  *           application/json:
  *             type: object
  *             example:
- *               id: example
+ *               key: example
  *       400:
  *         description: '`ERR_INVALID_ARG_TYPE` (Bad Request)'
  *       409:
@@ -216,14 +217,16 @@ router
   })
   .post(async (req, res, next) => {
     const { key, ...item } = req.body;
+    debug({ item });
 
     // key and detail fields are both required
-    if (key === undefined || !Object.keys(item).length) {
+    if (key === undefined) {
+      // if (key === undefined || !Object.keys(item).length) {
       return next(createHttpError(400));
     }
 
     try {
-    const pathname = generateFilePathFromItemKey(key);
+      const pathname = generateFilePathFromItemKey(key);
 
       await fs.writeFile(pathname.item, JSON.stringify(item), { flag: 'wx' });
       res.status(201).json({ key });
@@ -284,16 +287,67 @@ router
  *     responses:
  *       204:
  *         description: The item was deleted (No Content)
+ *   put:
+ *     summary: Full-item updating
+ *     description: |
+ *       Validate request: path of file to be written
+ *
+ *       - The primary key is taken from the `itemKey` request parameter, so `key` included in the request body will be silently ignored.
+ *
+ *       Open file for read and write (`fs.open` with `r+` flag), ensuring that the item exists before write. Then overwrite the file (`fileHandle.writeFile`).
+ *     tags: [items]
+ *     parameters:
+ *       - $ref: '#/components/parameters/itemKey'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Item'
+ *           examples:
+ *             example-OK:
+ *               $ref: '#/components/schemas/Item/example'
  *     responses:
  *       204:
- *         description: No Content
+ *         description: 'The item was successfully updated (No Content)'
+ *       400:
+ *         description: 'Invalid type/field; unparseable JSON (Bad Request)'
+ *       404:
+ *         description: '`ENOENT` (Not Found)'
+ *   patch:
+ *     summary: Partial-item updating
+ *     tags: [items]
+ *     parameters:
+ *       - $ref: '#/components/parameters/itemKey'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *           example:
+ *             keywords:
+ *               - nodejs
+ *               - expressjs
+ *               - mongodb
+ *     responses:
+ *       204:
+ *         description: 'The item was successfully updated (No Content)'
+ *       400:
+ *         description: 'Invalid type/field; unparseable JSON (Bad Request)'
+ *       404:
+ *         description: '`ENOENT` (Not Found)'
  */
 
 router
   .route('/:key')
   .all((req, res, next) => {
-    res.locals.pathname = generateFilePathFromItemKey(req.params.key);
-    next();
+    try {
+      res.locals.pathname = generateFilePathFromItemKey(req.params.key);
+      next();
+    } catch (e) {
+      next(e);
+    }
   })
   .get(async (req, res, next) => {
     res.sendFile(res.locals.pathname.item, (err) => {
@@ -314,20 +368,36 @@ router
   })
   .put(async (req, res, next) => {
     try {
-      if (req.params.id !== req.body.id) next(createHttpError(400));
+      await fs.access(res.locals.pathname.item);
 
-      await fs.access(req.pathname);
-      await fs.writeFile(req.pathname, JSON.stringify(req.body));
-
-      res.status(200);
-      res.json({ message: 'PUT success' });
-    } catch (err) {
-      switch (err.code) {
+      await fs.writeFile(res.locals.pathname.item, JSON.stringify(req.body));
+      res.status(204).send();
+    } catch (e) {
+      switch (e.code) {
         case 'ENOENT':
           next(createHttpError(404));
           break;
         default:
-          next(createHttpError(500));
+          next(e);
+      }
+    }
+  })
+  .patch(async (req, res, next) => {
+    try {
+      await fs.access(res.locals.pathname.item);
+
+      const fileContent = await fs.readFile(res.locals.pathname.item, 'utf-8');
+      const item = Object.assign(JSON.parse(fileContent), req.body);
+
+      await fs.writeFile(res.locals.pathname.item, JSON.stringify(item));
+      res.status(204).send();
+    } catch (e) {
+      switch (e.code) {
+        case 'ENOENT':
+          next(createHttpError(404));
+          break;
+        default:
+          next(e);
       }
     }
   });
