@@ -11,3 +11,4 @@ router.use('/api-docs', apiDocs);
 router.use('/items', itemsApi);
 
 module.exports = router;
+debug('exported /v0 route')

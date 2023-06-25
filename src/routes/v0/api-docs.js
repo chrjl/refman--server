@@ -10,20 +10,18 @@ const options = {
   apis: [path.join(__dirname, '*.js')],
 };
 
+const uiOptions = {
+  swaggerOptions: {
+    defaultModelsExpandDepth: 3,
+    tryItOutEnabled: true,
+  },
+};
+
 const openapiSpecification = swaggerJsdoc(options);
 
 const router = express.Router();
 
-/**
- * @openapi
- * /:
- *   get:
- *     description: Welcome to swagger-jsdoc!
- *     responses:
- *       200:
- *         description: Returns a mysterious string.
- */
 router.use('/', swaggerUi.serve);
-router.get('/', swaggerUi.setup(openapiSpecification));
+router.get('/', swaggerUi.setup(openapiSpecification, uiOptions));
 
 module.exports = router;
