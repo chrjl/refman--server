@@ -5,6 +5,7 @@ const createHttpError = require('http-errors');
 
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const tar = require('tar');
 
 const debug = require('debug')('app:routes/json-storage-api');
 
@@ -78,11 +79,27 @@ const dbTrash = process.env.DB_TRASH;
  *     description: |
  *       Reads file list (`fs.readdir`) of storage directory, filtering in files with `.json` extname.
  *
- *       Then, generate an item for each file and return an array of item objects:
+ *       Then, depending on format specified in query, either:
+ *       - Generate an item for each file and return an array of item objects.
+ *       - Export an archive of all files in the collection directory.
+ *     tags: [items, development]
+ *     parameters:
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - json
+ *             - archive
+ *         description: |
+ *           `json` (default) will return a JSON array of all items.
+ *           - Assign file name (without extname) to `key` field.
+ *           - Read file (`fs.readFile`) and parse (`JSON.parse`) fields.
  *
- *       - Assign file name (without extname) to `key` field.
- *       - Read file (`fs.readFile`) and parse (`JSON.parse`) fields.
- *     tags: [items]
+ *           `archive` will return a `.tgz` archive of all `.json` files in the collection directory.
+ *           - Set the `Content-Type` header to `application/x-tar-gz`.
+ *           - Set the `Content-Disposition` header to set the attachment filename.
+ *           - Use the `tar` package to create an archive of the collection directory and pipe it to the response object.
  *     responses:
  *       200:
  *         content:
@@ -163,6 +180,7 @@ router
   .get([
     async (req, res, next) => {
       // get file list from storage root
+
       try {
         const fileNames = await fs.readdir(dbRoot);
         res.locals.fileNames = fileNames.filter(
@@ -178,27 +196,59 @@ router
       }
     },
     async (req, res, next) => {
-      // parse files and respond with a single JSON array
-      const parseFiles = res.locals.fileNames.map(async (fileName) => {
-        try {
-          const filePath = path.join(dbRoot, fileName);
-          const fileContent = await fs.readFile(filePath);
-          const item = JSON.parse(fileContent);
+      // route request based on format query, default is json
 
-          const key = path.basename(fileName, '.json');
-          return { key, ...item };
-        } catch (err) {
-          debug(`Error parsing ${fileName}`);
-          throw err;
-        }
-      });
+      switch (req.query.format) {
+        case undefined:
+        case 'json':
+          // parse all files with .json ext in the collection
+          // then filter only files with valid JSON
+          // then respond with an inline JSON array
 
-      const data = await Promise.allSettled(parseFiles);
-      const items = data
-        .filter((result) => result.status === 'fulfilled')
-        .map((result) => result.value);
+          const parseFiles = await Promise.allSettled(
+            res.locals.fileNames.map(async (fileName) => {
+              try {
+                const filePath = path.join(dbRoot, fileName);
+                const fileContent = await fs.readFile(filePath);
+                const item = JSON.parse(fileContent);
 
-      res.json(items);
+                const key = path.basename(fileName, '.json');
+                return { key, ...item };
+              } catch (err) {
+                debug(`Error parsing ${fileName}`);
+                throw err; // this will settle to a rejected promise
+              }
+            })
+          );
+
+          res.json(
+            parseFiles
+              .filter((result) => result.status === 'fulfilled')
+              .map((result) => result.value)
+          );
+          break;
+
+        case 'archive':
+          // create an archive of all .json files in the collection directory
+          // then respond with an attachment
+
+          const attachmentFilename = path.format({
+            name: `collection_${new Date().toISOString().replaceAll(':', '_')}`,
+            ext: '.tgz',
+          });
+
+          res.setHeader('Content-Type', 'application/x-tar-gz');
+          res.setHeader(
+            'Content-Disposition',
+            `attachment; filename=${attachmentFilename}`
+          );
+
+          tar.c({ cwd: dbRoot, gzip: true }, res.locals.fileNames).pipe(res);
+          break;
+
+        default:
+          return next(createHttpError(400, 'invalid format'));
+      }
     },
   ])
   .delete(async (req, res, next) => {
