@@ -1,0 +1,11 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "refman util scripts",
+    "description": "The OpenAPI specification: [oas3.json](./oas3.json)",
+    "license": {
+      "name": null
+    }
+  },
+  "servers": [{ "url": "/utils" }]
+}
