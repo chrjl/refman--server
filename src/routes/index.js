@@ -1,12 +1,12 @@
 // depends on process.env.STORAGE_BACKEND
 
-const entries = require('./json-storage');
+const v0 = require('./v0');
 const metadataScraper = require('./metadata-scraper');
 const archives = require('./archives');
 // const sqlite = require('./sqlite');
 
 module.exports = {
-  entries,
+  v0,
   archives,
   metadata: metadataScraper,
 
