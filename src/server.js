@@ -14,6 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/v0', routes.v0);
+app.use('/utils', routes.utils);
 app.use('/archives', routes.archives);
 app.use('/metadata', routes.metadata);
 
