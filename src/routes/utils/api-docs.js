@@ -1,28 +1,17 @@
-const path = require('path');
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
-const swaggerJsdoc = require('swagger-jsdoc');
 
-const definition = require('./api-definition.json');
-
-const options = {
-  definition,
-  apis: [path.join(__dirname, '*.js')],
+const uiOptions = {
+  swaggerOptions: {
+    tryItOutEnabled: true,
+    url: '/utils/oas3.json',
+  },
 };
-
-const openapiSpecification = swaggerJsdoc(options);
 
 const router = express.Router();
 
-router.use('/', swaggerUi.serveFiles(openapiSpecification));
-router.get('/', swaggerUi.setup(openapiSpecification));
-
-router.get('/oas3.json', (req, res) => {
-  res.setHeader(
-    'Content-Disposition',
-    'attachment; filename="refman--server_utils.oas3.json"'
-  );
-  res.json(openapiSpecification);
-});
+router
+  .use('/', swaggerUi.serveFiles(null, uiOptions))
+  .get('/', swaggerUi.setup(null, uiOptions));
 
 module.exports = router;
