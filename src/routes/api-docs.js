@@ -10,11 +10,11 @@ const options = {
     tryItOutEnabled: true,
     urls: [
       {
-        url: '/utils/oas3.json',
+        url: '/utils/openapi.json',
         name: 'utils',
       },
       {
-        url: '/v0/oas3.json',
+        url: '/v0/openapi.json',
         name: 'API v0',
       },
     ],
