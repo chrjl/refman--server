@@ -68,13 +68,13 @@ router
       data.entrysubtype = data.type;
       delete data.type;
 
-      data.publisher = [data.provider];
+      data.publisher = data.provider ? [data.provider] : undefined;
       delete data.provider;
 
       data.date = data.published;
       delete data.published;
 
-      data.author = [data.author];
+      data.author = data.author ? [data.author] : undefined;
 
       if (req.query.fields) {
         // filter data to requested subset of fields

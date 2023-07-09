@@ -82,7 +82,7 @@ const dbTrash = process.env.DB_TRASH;
  *       Then, depending on format specified in query, either:
  *       - Generate an item for each file and return an array of item objects.
  *       - Export an archive of all files in the collection directory.
- *     tags: [items, development]
+ *     tags: [items]
  *     parameters:
  *       - in: query
  *         name: format

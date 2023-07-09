@@ -1,6 +1,6 @@
 {
-  "name": "@reference-manager/server",
-  "version": "1.0.0",
+  "name": "@refman/server",
+  "version": "0.0.0",
   "description": "",
   "main": "src/index.js",
   "scripts": {
@@ -29,11 +29,11 @@
     "metadata-scraper": "^0.2.61",
     "morgan": "^1.10.0",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^4.6.3",
+    "swagger-ui-express": "^5.0.0",
     "tar": "^6.1.15"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "nodemon": "^3.0.0"
   },
   "nodemonConfig": {
     "verbose": false,
