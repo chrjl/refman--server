@@ -17,6 +17,10 @@ const options = {
         url: '/v0/openapi.json',
         name: 'API v0',
       },
+      {
+        url: '/v1/openapi.json',
+        name: 'API v1',
+      },
     ],
   },
 };

@@ -16,6 +16,7 @@ app.use(express.json());
 app.use('/api-docs', routes.apiDocs);
 app.use('/utils', routes.utils);
 app.use('/v0', routes.v0);
+app.use('/v1', routes.v1);
 
 // error handler
 // use express default

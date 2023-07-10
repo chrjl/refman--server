@@ -1,0 +1,22 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "refman v1 (sqlite)",
+    "summary": "An implementation of a CRUD app",
+    "description": "Storage in SQLite, CRUD operations via Knex.js.",
+    "license": {
+      "name": null
+    }
+  },
+  "servers": [
+    {
+      "url": "/v1",
+      "description": "sqlite"
+    }
+  ],
+  "externalDocs": {
+    "description": "Read more...",
+    "url": "https://github.com/chrjl/refman--docs/wiki"
+  }
+}
