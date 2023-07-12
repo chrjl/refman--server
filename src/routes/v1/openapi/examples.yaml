@@ -1,0 +1,9 @@
+components:
+  examples:
+    example-400-key:
+      value:
+        key: 400
+      description: Request body illegally specifies primary key.
+    example-400-syntax:
+      value: 'bad syntax'
+      description: Request body is not valid JSON.

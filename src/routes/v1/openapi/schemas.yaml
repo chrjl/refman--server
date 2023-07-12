@@ -1,0 +1,14 @@
+components:
+  parameters:
+    itemKey:
+      in: path
+      name: itemKey
+      required: true
+      schema:
+        type: string
+      description: The item's primary key.
+      examples:
+        example-OK:
+          value: 100
+        example-404:
+          value: -1
