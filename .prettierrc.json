@@ -1,0 +1,6 @@
+{
+  "formatter": "sql-formatter",
+  "keywordCase": "upper",
+  "plugins": ["prettier-plugin-sql"],
+  "singleQuote": true
+}
