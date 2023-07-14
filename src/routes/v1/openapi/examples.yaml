@@ -7,3 +7,6 @@ components:
     example-400-syntax:
       value: 'bad syntax'
       description: Request body is not valid JSON.
+    response-keywords:
+      value:
+        keywords: [nodejs, express, rest, openapi]

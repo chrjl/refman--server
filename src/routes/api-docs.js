@@ -8,6 +8,8 @@ const options = {
   swaggerOptions: {
     defaultModelsExpandDepth: 3,
     tryItOutEnabled: true,
+    filter: true,
+    tagsSorter: 'alpha',
     urls: [
       {
         url: '/utils/openapi.json',

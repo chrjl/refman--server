@@ -1,0 +1,93 @@
+/tags:
+  get:
+    summary: All keywords in the collection.
+    description: |
+      ```sql
+      SELECT DISTINCT
+          keyword 
+      FROM
+          keywords;
+      ```
+    tags: ['#development[tags]']
+    responses:
+      200:
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+            examples:
+              example:
+                $ref: '#/components/examples/response-keywords'
+  delete:
+    summary: Delete (all references to) a list of keywords.
+    description: |
+      ```sql
+      DELETE FROM keywords
+      WHERE 
+          keyword IN ({tag[0]}, {tag[1]}, {tag[2]})
+      ```
+    tags: ['#development[tags]']
+    parameters:
+      - $ref: '#/components/parameters/tag'
+    responses:
+      204:
+        description: The items were deleted. (No Content)
+      400:
+        description: Missing required parameter. (Bad Request)'
+
+/tags/{tag}:
+  post:
+    summary: Perform operations on a specific keyword.
+    description: |
+      Operation details are to be supplied by header parameters. Data can be sent in request body.
+
+      Supported operations:
+
+      - Rename an existing keyword, emulating the WebDAV `MOVE` method. The new name of the keyword is passed to the `Destination` header.
+
+        ```sql
+        UPDATE OR REPLACE keywords
+        SET
+            keyword = {tag}
+        WHERE
+            keyword = {Destination}
+        ```
+
+        The new name does not have to be unique. A keyword can be renamed such that its associated items are absorbed by an already existing keyword.
+
+        ---
+
+      > **Note:**
+      > Duplicate (`itemKey`, `keyword`) entries are avoided via the `UNIQUE INDEX` constraint.
+    tags: ['#development[tags]']
+    parameters:
+      - in: header
+        name: X-HTTP-Method-Override
+        description: Emulates selected WebDAV methods.
+        required: true
+        schema:
+          type: string
+          default: MOVE
+          enum:
+            - MOVE
+            - 405_NOT_ALLOWED
+      - in: header
+        name: Destination
+        schema:
+          type: string
+        description: |
+          Required if `MOVE` method is selected.
+    responses:
+      204:
+        description: The keyword was successfully renamed. (No Response)
+        headers:
+          Location:
+            schema:
+              type: string
+      400:
+        description: Missing required parameter. (Bad Request)
+      405:
+        description: The requested operation is not allowed. (Method Not Allowed)
+      404:
+        description: Keyword not found. (Not Found)
